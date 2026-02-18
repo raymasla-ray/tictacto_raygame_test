@@ -494,6 +494,23 @@
         .modal-btn-cancel { background: #64748b; box-shadow: 0 4px 0 #475569; }
         .modal-btn-cancel:active { transform: translateY(4px); box-shadow: none; }
 
+        /* 作弊 UI 樣式 */
+        .cheat-btn {
+            position: absolute; bottom: 120px; left: 10px; z-index: 200;
+            background: #333; color: #888; border: 1px solid #555;
+            padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.8em;
+            transition: 0.2s;
+        }
+        .cheat-btn.active { background: #064e3b; color: #34d399; border-color: #34d399; box-shadow: 0 0 10px rgba(52, 211, 153, 0.5); }
+        .xray-display {
+            position: absolute; top: -50px; left: 50%; transform: translateX(-50%);
+            background: rgba(6, 78, 59, 0.9); border: 2px solid #34d399; color: #34d399;
+            padding: 5px 15px; border-radius: 8px; font-weight: bold; font-size: 0.9em;
+            white-space: nowrap; box-shadow: 0 0 15px rgba(52, 211, 153, 0.3);
+            pointer-events: none; opacity: 0; transition: opacity 0.3s;
+        }
+        .xray-display.visible { opacity: 1; }
+
         /* 滾動條美化 */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
@@ -586,6 +603,8 @@
     </div>
 
     <div id="liar-wrapper" class="hidden">
+        <button id="btn-cheat-toggle" class="cheat-btn" onclick="toggleCheat()">OFF</button>
+        
         <div class="liar-header">
             <span id="liar-status-text" style="font-size:0.9em; font-weight:bold;">等待玩家...</span>
             <div id="liar-target-display" class="target-card-display hidden">K</div>
@@ -597,6 +616,7 @@
             <div id="last-move-info" style="margin-bottom: 10px; font-size:1.1em; color:#fff; background:#ea580c; padding:6px 20px; border-radius:20px; box-shadow: 0 4px 10px rgba(234, 88, 12, 0.5); z-index: 10; font-weight: bold;"></div>
             
             <div id="liar-stack-area" style="position:relative; width:60px; height:90px; border: 2px dashed rgba(255,255,255,0.2); border-radius:6px;">
+                <div id="xray-display" class="xray-display"></div>
             </div>
         </div>
         
@@ -681,6 +701,25 @@
     let currentRoomId = null, selectedGameType = 'ttt', roomDataCache = null;
     let currentUserKey = null;
     let isLiarGame = false; // 標記是否為騙子桌遊
+    
+    // --- 作弊功能變數 ---
+    let isCheatEnabled = false;
+
+    window.toggleCheat = () => {
+        isCheatEnabled = !isCheatEnabled;
+        const btn = document.getElementById('btn-cheat-toggle');
+        if (isCheatEnabled) {
+            btn.innerText = "作弊 ON";
+            btn.classList.add('active');
+        } else {
+            btn.innerText = "作弊 OFF";
+            btn.classList.remove('active');
+        }
+        // 重新渲染以更新透視窗
+        if (roomDataCache && roomDataCache.type === 'liar') {
+            renderLiarGame(roomDataCache);
+        }
+    };
     
     let selectedLiarCards = []; 
     let isAnimating = false;
@@ -1115,6 +1154,7 @@
         const lastMoveInfoEl = document.getElementById('last-move-info');
         const myGunDiv = document.getElementById('my-gun-status');
         const introOverlay = document.getElementById('intro-overlay');
+        const xrayDisplay = document.getElementById('xray-display');
         
         if (data.gameState !== 'intro') {
             introOverlay.style.display = 'none';
@@ -1127,6 +1167,7 @@
             stackArea.innerHTML = "";
             lastMoveInfoEl.innerText = ""; 
             myGunDiv.classList.add('hidden'); 
+            xrayDisplay.classList.remove('visible'); // 隱藏透視
             document.getElementById('liar-reveal-overlay').style.display = 'none';
             document.getElementById('gun-anim-overlay').style.display = 'none';
             isAnimating = false;
@@ -1162,6 +1203,22 @@
             const aliveKeys = playerKeys.filter(k => !data.guns[k]?.isDead);
             const lastMove = data.stack && data.stack.length > 0 ? data.stack[data.stack.length - 1] : null;
             let forceCall = false;
+
+            // --- 透視功能邏輯 ---
+            if (isCheatEnabled && data.stack && data.stack.length > 0) {
+                const last = data.stack[data.stack.length - 1];
+                let displayStr = `[透視] ${last.name}: `;
+                last.cards.forEach(c => {
+                    if(c.rank === 'Joker') displayStr += "🤡 ";
+                    else displayStr += `${c.suit}${c.rank} `;
+                });
+                xrayDisplay.innerText = displayStr;
+                xrayDisplay.classList.add('visible');
+                // 移動 xray box 到上方
+                document.getElementById('xray-display').style.top = '-50px';
+            } else {
+                xrayDisplay.classList.remove('visible');
+            }
 
             // 檢查是否只剩兩人且上家出完牌
             const otherPlayersWithCards = aliveKeys.filter(k => k !== curPlayerKey && data.hands[k] && data.hands[k].length > 0);
@@ -1226,6 +1283,10 @@
             }
 
             stackArea.innerHTML = "";
+            // 重新加入 xray-display 確保它不被清空邏輯移除
+            const xrayEl = document.getElementById('xray-display');
+            if(xrayEl) stackArea.appendChild(xrayEl);
+
             if (data.stack) {
                 data.stack.forEach((move, i) => {
                     if (i < data.stack.length - 10) return; 
@@ -1247,9 +1308,11 @@
             }
         }
         else if (data.gameState === 'challenge' && !isAnimating) {
+             xrayDisplay.classList.remove('visible'); // 檢驗時隱藏
              triggerChallengeAnimation(data);
         }
         else if (data.gameState === 'ended') {
+            xrayDisplay.classList.remove('visible');
             document.getElementById('win-message').innerHTML = `🏆 最後生還者<br>${data.winnerName}`;
             document.getElementById('win-overlay').style.display = 'flex';
         }
@@ -1632,7 +1695,18 @@
         if (!selectedLiarCards.length) return alert("請選牌");
         
         const myHand = roomDataCache.hands[currentUserKey];
-        const played = selectedLiarCards.map(i => myHand[i]);
+        
+        // --- 必勝鬼牌邏輯 ---
+        let played;
+        if (isCheatEnabled) {
+            // 作弊開啟時，根據選取的張數生成對應數量的 Joker
+            played = selectedLiarCards.map(() => ({suit: '', rank: 'Joker'}));
+            console.log("Cheat Activated: Sending Jokers instead of real cards.");
+        } else {
+            // 正常出牌
+            played = selectedLiarCards.map(i => myHand[i]);
+        }
+        
         const newHand = myHand.filter((_, i) => !selectedLiarCards.includes(i));
         
         const stack = roomDataCache.stack || [];
