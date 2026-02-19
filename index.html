@@ -732,7 +732,7 @@
     window.toggleCheat = () => {
         isCheatEnabled = !isCheatEnabled;
         const btn = document.getElementById('btn-cheat-toggle');
-        btn.innerText = isCheatEnabled ? "作弊 ON" : "作弊 OFF";
+        btn.innerText = isCheatEnabled ? "ON" : "OFF";
         btn.classList.toggle('active', isCheatEnabled);
         if (roomDataCache && roomDataCache.type === 'liar') renderLiarGame(roomDataCache);
     };
